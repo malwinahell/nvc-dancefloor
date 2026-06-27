@@ -9,8 +9,6 @@ import type { TileTemplate } from "./types/nvc";
 export default function NvcDancefloorPage() {
   const [customTiles, setCustomTiles] = useState<TileTemplate[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
-  // Incrementing this key remounts AddTileModal on every open,
-  // which resets its internal state without any setState-in-effect.
   const [modalKey, setModalKey] = useState(0);
 
   const openModal = useCallback(() => {
@@ -18,8 +16,6 @@ export default function NvcDancefloorPage() {
     setModalOpen(true);
   }, []);
 
-  // Reference to FlowCanvas's internal `addTile` function.
-  // FlowCanvas calls onRegisterAddTile once on mount to expose it here.
   const addTileRef = useRef<((tile: TileTemplate) => void) | null>(null);
 
   const handleRegisterAddTile = useCallback(
