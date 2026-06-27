@@ -3,9 +3,8 @@
 import React, { useState, useEffect } from "react";
 import type { TileTemplate } from "../types/nvc";
 
-// NOTE: This component is intentionally remounted via a `key` prop in the parent
-// every time the modal opens. That way state always starts fresh without needing
-// to reset it inside an effect (which triggers cascading renders).
+// NOTE: remounted via key prop in page.tsx on every open — state always fresh,
+// no setState-in-effect needed.
 
 interface AddTileModalProps {
   isOpen: boolean;
@@ -28,7 +27,9 @@ const PRESET_COLORS = [
   "#C7F2A4",
 ];
 
+// '' = no icon sentinel; must stay first in the array
 const PRESET_ICONS = [
+  "", // "no icon" — rendered as ∅ in the picker
   "💡",
   "🎯",
   "🌊",
@@ -53,7 +54,7 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
   const [color, setColor] = useState("#D8B4FE");
   const [icon, setIcon] = useState("💡");
 
-  // Close on Escape key
+  // Close on Escape
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
@@ -63,13 +64,15 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [isOpen, onClose]);
 
+  const canSave = label.trim().length > 0;
+
   const handleSave = () => {
-    if (!label.trim()) return;
+    if (!canSave) return;
     onSave({
       label: label.trim(),
       description: description.trim() || undefined,
       color,
-      icon,
+      icon, // '' = no icon, handled in NvcNode via !!data.icon check
       nvcType: "custom",
       isDefault: false,
     });
@@ -77,7 +80,7 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
 
   if (!isOpen) return null;
 
-  const canSave = label.trim().length > 0;
+  const hasIcon = icon !== "";
 
   return (
     <>
@@ -100,16 +103,16 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
           position: "fixed",
           top: "50%",
           left: "50%",
-          transform: "translate(-50%, -50%)",
+          transform: "translate(-50%,-50%)",
           zIndex: 201,
           background: "#F9F9F7",
-          borderRadius: "28px",
+          borderRadius: 28,
           padding: "28px 28px 24px",
           width: "min(460px, calc(100vw - 32px))",
           maxHeight: "calc(100dvh - 48px)",
           overflowY: "auto",
           boxShadow: "0 24px 80px rgba(0,0,0,0.18)",
-          fontFamily: '"Plus Jakarta Sans", "Inter", sans-serif',
+          fontFamily: '"Plus Jakarta Sans","Inter",sans-serif',
         }}
       >
         {/* Header */}
@@ -142,28 +145,42 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
           style={{
             background: color,
             borderRadius: 20,
-            padding: "14px 18px",
+            padding: "12px 16px",
             marginBottom: 24,
             border: "1px solid rgba(0,0,0,0.05)",
             boxShadow: "0 4px 16px rgba(0,0,0,0.04)",
             display: "flex",
             alignItems: "center",
-            gap: 12,
-            minHeight: 56,
+            gap: hasIcon ? 10 : 0,
+            minHeight: 52,
           }}
         >
-          <span style={{ fontSize: 22 }}>{icon}</span>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a" }}>
+          {/* Icon only if selected */}
+          {hasIcon && (
+            <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>
+              {icon}
+            </span>
+          )}
+
+          {/* Text centred horizontally */}
+          <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>
               {label || (
-                <span style={{ color: "rgba(0,0,0,0.3)" }}>
+                <span style={{ color: "rgba(0,0,0,0.28)" }}>
                   Podgląd kafelka...
                 </span>
               )}
             </div>
             {description && (
               <div
-                style={{ fontSize: 11, color: "rgba(0,0,0,0.4)", marginTop: 2 }}
+                style={{
+                  fontSize: 10,
+                  color: "rgba(0,0,0,0.38)",
+                  marginTop: 3,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
               >
                 {description}
               </div>
@@ -171,39 +188,55 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
           </div>
         </div>
 
-        {/* Icon picker */}
+        {/* ── Icon picker ───────────────────────────────────────────────────── */}
         <div style={{ marginBottom: 20 }}>
           <label style={labelStyle}>Ikona</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {PRESET_ICONS.map((i) => (
-              <button
-                key={i}
-                onClick={() => setIcon(i)}
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 12,
-                  border:
-                    icon === i
+            {PRESET_ICONS.map((i, idx) => {
+              const isSelected = icon === i;
+              const isEmpty = i === "";
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setIcon(i)}
+                  title={isEmpty ? "Brak ikony" : i}
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 12,
+                    border: isSelected
                       ? "2px solid #7C3AED"
                       : "1.5px solid rgba(0,0,0,0.08)",
-                  background: icon === i ? "rgba(124,58,237,0.07)" : "white",
-                  cursor: "pointer",
-                  fontSize: 18,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transition: "border 0.15s, background 0.15s",
-                  boxSizing: "border-box",
-                }}
-              >
-                {i}
-              </button>
-            ))}
+                    background: isSelected
+                      ? "rgba(124,58,237,0.07)"
+                      : isEmpty
+                        ? "rgba(0,0,0,0.03)"
+                        : "white",
+                    cursor: "pointer",
+                    fontSize: isEmpty ? 13 : 18,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: isEmpty
+                      ? isSelected
+                        ? "#7C3AED"
+                        : "#9CA3AF"
+                      : "inherit",
+                    fontWeight: isEmpty ? 700 : 400,
+                    transition: "border 0.12s, background 0.12s",
+                    boxSizing: "border-box",
+                    // "no icon" gets a slightly different shape as a hint
+                    borderStyle: isEmpty ? "dashed" : "solid",
+                  }}
+                >
+                  {isEmpty ? "∅" : i}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Color picker */}
+        {/* ── Colour picker ─────────────────────────────────────────────────── */}
         <div style={{ marginBottom: 20 }}>
           <label style={labelStyle}>Kolor</label>
           <div
@@ -228,12 +261,13 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
                   outline:
                     color === c ? "2px solid #7C3AED" : "2px solid transparent",
                   outlineOffset: 2,
-                  transition: "outline 0.15s",
+                  transition: "outline 0.12s",
                   boxSizing: "border-box",
                 }}
               />
             ))}
-            {/* Custom color input */}
+
+            {/* Custom colour input */}
             <label
               title="Własny kolor"
               style={{
@@ -268,7 +302,7 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
           </div>
         </div>
 
-        {/* Label input */}
+        {/* ── Label ──────────────────────────────────────────────────────────── */}
         <div style={{ marginBottom: 16 }}>
           <label style={labelStyle}>
             Nazwa <span style={{ color: "#EF4444" }}>*</span>
@@ -287,12 +321,12 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
           />
         </div>
 
-        {/* Description input */}
+        {/* ── Description ────────────────────────────────────────────────────── */}
         <div style={{ marginBottom: 28 }}>
           <label style={labelStyle}>
             Opis{" "}
             <span style={{ fontSize: 11, fontWeight: 400, color: "#9CA3AF" }}>
-              (opcjonalnie)
+              (opcjonalnie — pojawi się jako podpowiedź na kafelku)
             </span>
           </label>
           <input
@@ -300,12 +334,12 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Krótka wskazówka pomocnicza..."
-            maxLength={80}
+            maxLength={120}
             style={inputStyle}
           />
         </div>
 
-        {/* Actions */}
+        {/* ── Actions ────────────────────────────────────────────────────────── */}
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onClose} style={cancelBtnStyle}>
             Anuluj
@@ -327,7 +361,7 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
   );
 }
 
-// ── Shared mini-styles ──────────────────────────────────────────────────────
+// ── Shared mini-styles ────────────────────────────────────────────────────────
 
 const labelStyle: React.CSSProperties = {
   display: "block",
@@ -345,11 +379,10 @@ const inputStyle: React.CSSProperties = {
   border: "1.5px solid rgba(0,0,0,0.09)",
   background: "white",
   fontSize: 14,
-  fontFamily: '"Plus Jakarta Sans", "Inter", sans-serif',
+  fontFamily: '"Plus Jakarta Sans","Inter",sans-serif',
   color: "#1a1a1a",
   outline: "none",
   boxSizing: "border-box",
-  transition: "border 0.15s",
 };
 
 const cancelBtnStyle: React.CSSProperties = {
@@ -362,7 +395,7 @@ const cancelBtnStyle: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 600,
   color: "#6B7280",
-  fontFamily: '"Plus Jakarta Sans", "Inter", sans-serif',
+  fontFamily: '"Plus Jakarta Sans","Inter",sans-serif',
 };
 
 const saveBtnStyle: React.CSSProperties = {
@@ -374,6 +407,6 @@ const saveBtnStyle: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 700,
   color: "#4C1D95",
-  fontFamily: '"Plus Jakarta Sans", "Inter", sans-serif',
+  fontFamily: '"Plus Jakarta Sans","Inter",sans-serif',
   letterSpacing: "-0.01em",
 };
