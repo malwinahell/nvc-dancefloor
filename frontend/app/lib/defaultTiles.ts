@@ -1,0 +1,58 @@
+import type { TileTemplate } from "../types/nvc";
+
+export const DEFAULT_NVC_TILES: TileTemplate[] = [
+  {
+    id: "default-intention",
+    label: "Intencja / Połączenie",
+    nvcType: "intention",
+    color: "#D8B4FE",
+    icon: "🌟",
+    description: "Wyższa perspektywa i gotowość do empatii",
+    isDefault: true,
+  },
+  {
+    id: "default-observation",
+    label: "Obserwacja",
+    nvcType: "observation",
+    color: "#E6E6FA",
+    icon: "👁️",
+    description: "Co faktycznie widzę lub słyszę?",
+    isDefault: true,
+  },
+  {
+    id: "default-feeling",
+    label: "Uczucie",
+    nvcType: "feeling",
+    color: "#FFB5A7",
+    icon: "💛",
+    description: "Co czuję w związku z tym?",
+    isDefault: true,
+  },
+  {
+    id: "default-need",
+    label: "Potrzeba",
+    nvcType: "need",
+    color: "#A3E4D7",
+    icon: "🌱",
+    description: "Jaka potrzeba za tym stoi?",
+    isDefault: true,
+  },
+  {
+    id: "default-request",
+    label: "Prośba",
+    nvcType: "request",
+    color: "#E9F7EF",
+    icon: "✋",
+    description: "O co konkretnie proszę?",
+    isDefault: true,
+  },
+  {
+    id: "default-judgment",
+    label: "Osąd / Szakal",
+    nvcType: "judgment",
+    color: "#D1D5DB",
+    icon: "🦊",
+    description: "Myśl lub interpretacja (nie fakt)",
+    isDefault: true,
+  },
+];
