@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, DragEvent } from "react";
+import React, { useState, useEffect, DragEvent } from "react";
 import type { TileTemplate } from "../types/nvc";
 import { DEFAULT_NVC_TILES } from "../lib/defaultTiles";
 
@@ -75,9 +75,12 @@ function TileCard({
               fontSize: 10,
               color: "rgba(0,0,0,0.38)",
               marginTop: 2,
-              whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              lineHeight: 1.4,
             }}
           >
             {tile.description}
@@ -195,7 +198,7 @@ function SidebarContent({
             marginBottom: 24,
           }}
         >
-          {DEFAULT_NVC_TILES.map((tile) => (
+          {DEFAULT_NVC_TILES.map((tile: TileTemplate) => (
             <TileCard
               key={tile.id}
               tile={tile}
@@ -286,6 +289,20 @@ export function TileSidebar({
 }: TileSidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Detect viewport width — replaces Tailwind md: classes.
+  // Initial value is read in the useState lazy initializer (runs only on client)
+  // so the effect body only registers the change listener — no synchronous setState.
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 767px)").matches;
+  });
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   const onDragStart = (e: DragEvent<HTMLDivElement>, tile: TileTemplate) => {
     e.dataTransfer.setData("application/nvc-tile", JSON.stringify(tile));
     e.dataTransfer.effectAllowed = "move";
@@ -308,8 +325,8 @@ export function TileSidebar({
     <>
       {/* ── Desktop: fixed left sidebar ─────────────────────────────────── */}
       <aside
-        className="hidden md:flex"
         style={{
+          display: isMobile ? "none" : "flex",
           width: 264,
           flexShrink: 0,
           background: "rgba(255,255,255,0.88)",
@@ -326,7 +343,7 @@ export function TileSidebar({
       </aside>
 
       {/* ── Mobile: FAB + bottom sheet ──────────────────────────────────── */}
-      <div className="md:hidden">
+      <div style={{ display: isMobile ? "block" : "none" }}>
         {/* Floating action button */}
         <button
           onClick={() => setMobileOpen(true)}
