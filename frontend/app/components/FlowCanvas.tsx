@@ -11,14 +11,13 @@ import {
   useReactFlow,
   Panel,
 } from "@xyflow/react";
-import type { Node } from "@xyflow/react";
+import type { Node, Edge, ReactFlowInstance } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { nodeTypes } from "./NvcNode";
 import type { NvcNodeData, TileTemplate } from "../types/nvc";
 import { CELL_SIZE } from "../helpers/canvasConfig";
 
-// Typed alias — edges removed entirely
 type NvcFlowNode = Node<NvcNodeData, "nvcNode">;
 
 let _nodeCounter = 1;
@@ -34,19 +33,34 @@ function FlowCanvasInner({ onRegisterAddTile }: InnerProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<NvcFlowNode>([]);
   const { screenToFlowPosition, getViewport } = useReactFlow();
 
+  // ── Centre viewport on mount ─────────────────────────────────────────────
+  // nodeOrigin=[0.5,0.5] means node.position = tile CENTER.
+  // We centre the viewport so flow (0,0) is at the middle of the canvas area.
+  const handleInit = useCallback(
+    (instance: ReactFlowInstance<NvcFlowNode, Edge>) => {
+      const isMobile = window.innerWidth < 768;
+      const sidebarWidth = isMobile ? 0 : 264;
+      const canvasW = window.innerWidth - sidebarWidth;
+      const canvasH = window.innerHeight;
+      instance.setViewport({ x: canvasW / 2, y: canvasH / 2, zoom: 1 });
+    },
+    [],
+  );
+
   // ── Add tile ──────────────────────────────────────────────────────────────
+  // Because nodeOrigin=[0.5, 0.5] the x/y we pass IS the tile's visual centre.
+  // snapToGrid will then snap that centre to the nearest CELL_SIZE grid point.
 
   const addTileAtPosition = useCallback(
     (tile: TileTemplate, x: number, y: number) => {
       setNodes((nds) => {
-        // The very first tile placed on the canvas becomes the base tile
         const isFirst = nds.length === 0;
         return [
           ...nds,
           {
             id: nextId(),
             type: "nvcNode" as const,
-            position: { x, y },
+            position: { x, y }, // interpreted as CENTRE by nodeOrigin=[0.5,0.5]
             data: {
               label: tile.label,
               nvcType: tile.nvcType,
@@ -62,14 +76,15 @@ function FlowCanvasInner({ onRegisterAddTile }: InnerProps) {
     [setNodes],
   );
 
-  // Mobile tap-to-add: scatter near visible viewport centre
+  // Mobile tap-to-add: pass viewport centre directly (= tile centre)
   const addTileAtCenter = useCallback(
     (tile: TileTemplate) => {
       const vp = getViewport();
       const cx = (window.innerWidth / 2 - vp.x) / vp.zoom;
       const cy = (window.innerHeight / 2 - vp.y) / vp.zoom;
-      const jitter = () => (Math.random() - 0.5) * 120;
-      addTileAtPosition(tile, cx - 90 + jitter(), cy - 40 + jitter());
+      const jitter = () => (Math.random() - 0.5) * 80;
+      // No half-dimension subtraction needed — position IS the centre
+      addTileAtPosition(tile, cx + jitter(), cy + jitter());
     },
     [getViewport, addTileAtPosition],
   );
@@ -79,6 +94,8 @@ function FlowCanvasInner({ onRegisterAddTile }: InnerProps) {
   }, [onRegisterAddTile, addTileAtCenter]);
 
   // ── Drag-and-drop ─────────────────────────────────────────────────────────
+  // screenToFlowPosition gives the cursor position in flow coords;
+  // with nodeOrigin=[0.5,0.5] the tile will appear centred on the cursor.
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -103,35 +120,43 @@ function FlowCanvasInner({ onRegisterAddTile }: InnerProps) {
     <div style={{ width: "100%", height: "100%" }}>
       <ReactFlow
         nodes={nodes}
+        edges={[]}
         onNodesChange={onNodesChange}
         onDrop={onDrop}
         onDragOver={onDragOver}
+        onConnect={() => {}}
+        onInit={handleInit}
         nodeTypes={nodeTypes}
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+        /*
+          nodeOrigin=[0.5, 0.5]: the node's `position` is its CENTRE, not its
+          top-left corner. Combined with snapToGrid this centres tiles on grid
+          intersections instead of snapping their top-left to them.
+        */
+        nodeOrigin={[0.5, 0.5]}
+        snapToGrid
+        snapGrid={[CELL_SIZE, CELL_SIZE]}
         deleteKeyCode={["Backspace", "Delete"]}
         style={{ background: "#F9F9F7" }}
         proOptions={{ hideAttribution: false }}
-        snapToGrid
-        snapGrid={[CELL_SIZE, CELL_SIZE]}
-        // No edges — connections are intentionally disabled
-        edges={[]}
-        onConnect={() => {}}
       >
-        {/* Minor grid: dots at CELL_SIZE/2 mark the half-offset pyramid positions */}
+        {/*
+          Background: dots every CELL_SIZE px.
+          Each dot = a valid tile-centre snap point.
+          Minor dots at half-interval mark the pyramid offset positions.
+        */}
         <Background
           id="bg-minor"
           variant={BackgroundVariant.Dots}
-          color="rgba(0,0,0,0.08)"
+          color="rgba(0,0,0,0.06)"
           gap={CELL_SIZE / 2}
           size={1.5}
         />
-        {/* Major grid: lines at CELL_SIZE mark tile snap positions */}
         <Background
           id="bg-major"
-          variant={BackgroundVariant.Lines}
-          color="rgba(0,0,0,0.065)"
+          variant={BackgroundVariant.Dots}
+          color="rgba(0,0,0,0.14)"
           gap={CELL_SIZE}
-          lineWidth={1}
+          size={2.5}
         />
 
         <Controls
@@ -145,7 +170,6 @@ function FlowCanvasInner({ onRegisterAddTile }: InnerProps) {
           }}
         />
 
-        {/* Empty state */}
         {nodes.length === 0 && (
           <Panel position="top-center">
             <div
@@ -153,7 +177,7 @@ function FlowCanvasInner({ onRegisterAddTile }: InnerProps) {
                 marginTop: "20vh",
                 textAlign: "center",
                 pointerEvents: "none",
-                fontFamily: '"Plus Jakarta Sans", "Inter", sans-serif',
+                fontFamily: '"Plus Jakarta Sans","Inter",sans-serif',
               }}
             >
               <div style={{ fontSize: 44, opacity: 0.22, marginBottom: 14 }}>

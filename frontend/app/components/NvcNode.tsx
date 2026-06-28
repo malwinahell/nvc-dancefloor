@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useCallback } from "react";
 import { useReactFlow } from "@xyflow/react";
 import type { Node } from "@xyflow/react";
 import type { NvcNodeData } from "../types/nvc";
-import { TILE_WIDTH } from "../helpers/canvasConfig";
+import { TILE_WIDTH, TILE_HEIGHT } from "../helpers/canvasConfig";
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
@@ -22,7 +22,6 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** Returns a visibly darker shade of the given hex (for borders on pastel tiles). */
 function darkenHex(hex: string, amount = 0.22): string {
   let h = hex.replace("#", "");
   if (h.length === 3)
@@ -37,9 +36,7 @@ function darkenHex(hex: string, amount = 0.22): string {
   return `rgb(${r},${g},${b})`;
 }
 
-// ── Ring icon (SVG donut) ─────────────────────────────────────────────────────
-// Inactive: circle outline in neutral grey.
-// Active:   filled donut in the tile's own colour.
+// ── Ring SVG (donut) ──────────────────────────────────────────────────────────
 
 function RingIcon({ active, color }: { active: boolean; color: string }) {
   return (
@@ -56,7 +53,7 @@ function RingIcon({ active, color }: { active: boolean; color: string }) {
   );
 }
 
-// ── Node props ────────────────────────────────────────────────────────────────
+// ── NvcNode ───────────────────────────────────────────────────────────────────
 
 interface NvcNodeProps {
   id: string;
@@ -64,39 +61,53 @@ interface NvcNodeProps {
   selected?: boolean;
 }
 
-// ── NvcNode ───────────────────────────────────────────────────────────────────
-
 export function NvcNode({ id, data, selected }: NvcNodeProps) {
   const { setNodes } = useReactFlow();
-  const [descOpen, setDescOpen] = useState(false);
-
-  // Derive whether the overlay is actually visible.
-  // When the node loses selection the overlay hides automatically — no effect needed.
-  const isDescOpen = !!selected && descOpen;
-
-  // ── Actions ─────────────────────────────────────────────────────────────
 
   const handleDelete = useCallback(() => {
     setNodes((nds: Node[]) => nds.filter((n) => n.id !== id));
   }, [id, setNodes]);
 
   const handleSetAsBase = useCallback(() => {
-    if (data.isBase) return;
+    // Toggle isBase on this tile only — other tiles are unaffected.
+    // Multiple tiles can be base simultaneously.
     setNodes((nds: Node[]) =>
-      nds.map((n) => ({
-        ...n,
-        data: { ...(n.data as NvcNodeData), isBase: n.id === id },
-      })),
+      nds.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              data: {
+                ...(n.data as NvcNodeData),
+                isBase: !(n.data as NvcNodeData).isBase,
+              },
+            }
+          : n,
+      ),
     );
-  }, [id, data.isBase, setNodes]);
-
-  // ── Derived styles ───────────────────────────────────────────────────────
+  }, [id, setNodes]);
 
   const hasIcon = !!data.icon;
 
-  // Base tile uses a darkened version of the tile's own colour for border/glow
-  const baseBorder = `2px solid ${darkenHex(data.color)}`;
-  const baseShadow = `0 0 0 4px ${hexToRgba(data.color, 0.28)}, 0 8px 24px rgba(0,0,0,0.07)`;
+  // Base tile uses a thicker, darkened-colour border.
+  // Shadow is intentionally NOT part of base styling — it's unified for all tiles.
+  const baseBorder = `3px solid ${darkenHex(data.color)}`;
+
+  // ── Shadow logic ─────────────────────────────────────────────────────────
+  // Same shadow for every tile when selected; soft default when not selected.
+  // Base tile gets NO special shadow — its distinction is the border alone.
+  const shadow = selected
+    ? "0 0 0 4px rgba(124,58,237,0.1), 0 10px 32px rgba(0,0,0,0.08)"
+    : "0 8px 24px rgba(0,0,0,0.05)";
+
+  // ── Border logic ─────────────────────────────────────────────────────────
+  // Base tile: always coloured border (overrides selection border).
+  // Non-base selected: blue tint border.
+  // Default: near-invisible border.
+  const border = data.isBase
+    ? baseBorder
+    : selected
+      ? "1px solid rgba(110, 110, 110, 0.5)"
+      : "1px solid rgba(0,0,0,0.06)";
 
   return (
     <div
@@ -104,12 +115,12 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
         width: TILE_WIDTH,
         boxSizing: "border-box",
         position: "relative",
-        fontFamily: '"Plus Jakarta Sans", "Inter", sans-serif',
+        fontFamily: '"Plus Jakarta Sans","Inter",sans-serif',
       }}
     >
       {/* ── Floating action panel ────────────────────────────────────────────
-          Anchored above the tile card (bottom: 100% + marginBottom: 8px).
-          Only shown when the node is selected — opacity/pointerEvents toggle.
+          Visible only when node is selected.
+          opacity/pointerEvents toggle — no layout shift.
       ─────────────────────────────────────────────────────────────────────── */}
       <div
         style={{
@@ -135,18 +146,14 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
           whiteSpace: "nowrap",
         }}
       >
-        {/* Ring button — set this tile as base */}
+        {/* Ring icon — mark/unmark as base tile */}
         <button
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             handleSetAsBase();
           }}
-          title={
-            data.isBase
-              ? "Ten kafelek jest bazowy"
-              : "Ustaw jako kafelek bazowy"
-          }
+          title={data.isBase ? "Usuń wyróżnienie" : "Wyróżnij"}
           style={{
             display: "flex",
             alignItems: "center",
@@ -158,7 +165,7 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
             background: data.isBase
               ? hexToRgba(data.color, 0.18)
               : "transparent",
-            cursor: data.isBase ? "default" : "pointer",
+            cursor: "pointer",
             padding: 0,
             transition: "background 0.15s",
           }}
@@ -186,7 +193,7 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
           }}
         />
 
-        {/* Delete button */}
+        {/* Delete */}
         <button
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
@@ -221,33 +228,25 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
         </button>
       </div>
 
-      {/* ── Tile card ────────────────────────────────────────────────────────
-          overflow:hidden is intentional — it clips the description overlay
-          to the card's border-radius without resizing the tile.
-      ─────────────────────────────────────────────────────────────────────── */}
+      {/* ── Tile card ─────────────────────────────────────────────────────── */}
       <div
         style={{
           background: data.color,
           borderRadius: 20,
-          border: data.isBase
-            ? baseBorder
-            : selected
-              ? "2px solid rgba(124,58,237,0.5)"
-              : "1px solid rgba(0,0,0,0.06)",
-          boxShadow: data.isBase
-            ? baseShadow
-            : selected
-              ? "0 0 0 4px rgba(124,58,237,0.1), 0 10px 32px rgba(0,0,0,0.08)"
-              : "0 8px 24px rgba(0,0,0,0.05)",
-          padding: "12px 14px",
-          position: "relative",
+          border,
+          boxShadow: shadow,
+          padding: "0 14px",
+          height: TILE_HEIGHT,
+          boxSizing: "border-box",
           overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
           transition: "box-shadow 0.2s ease, border-color 0.2s ease",
           cursor: "grab",
-          minHeight: 52,
         }}
       >
-        {/* ── Layout: icon (vert-centre) + text (horiz-centre) ────────────── */}
+        {/* Icon (vertically centred) + text (horizontally centred) */}
         <div
           style={{
             display: "flex",
@@ -255,19 +254,17 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
             gap: hasIcon ? 8 : 0,
           }}
         >
-          {/* Icon — vertically centred via parent align-items:center */}
           {hasIcon && (
             <span style={{ fontSize: 20, lineHeight: 1, flexShrink: 0 }}>
               {data.icon}
             </span>
           )}
 
-          {/* Text block — centred horizontally in its flex column */}
           <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
-            {/* Title */}
+            {/* Title — up to 2 lines */}
             <div
               style={{
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: 600,
                 color: "#1a1a1a",
                 lineHeight: 1.35,
@@ -281,83 +278,28 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
               {data.label}
             </div>
 
-            {/* Description row: truncated text + ℹ toggle */}
+            {/* Description — max 2 lines, ellipsis on overflow */}
             {data.description && (
-              <div
+              <p
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 3,
+                  fontSize: 11,
+                  color: "rgba(0,0,0,0.48)",
+                  margin: 0,
                   marginTop: 3,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  textAlign: "center",
+                  lineHeight: 1.4,
                 }}
               >
-                <span
-                  style={{
-                    fontSize: 10,
-                    color: "rgba(0,0,0,0.38)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    flex: "0 1 auto",
-                    minWidth: 0,
-                  }}
-                >
-                  {data.description}
-                </span>
-
-                {/* ℹ / × toggle */}
-                <button
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDescOpen((v) => !v);
-                  }}
-                  title={isDescOpen ? "Ukryj opis" : "Pokaż pełen opis"}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: isDescOpen ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.22)",
-                    padding: "0 1px",
-                    flexShrink: 0,
-                    lineHeight: 1,
-                    fontFamily: "inherit",
-                    transition: "color 0.12s",
-                  }}
-                >
-                  {isDescOpen ? "×" : "ℹ"}
-                </button>
-              </div>
+                {data.description}
+              </p>
             )}
           </div>
         </div>
-
-        {/* ── Description overlay ─────────────────────────────────────────────
-            position:absolute + bottom:0 → sticks to bottom of the tile card.
-            overflow:hidden on the card clips it to the same border-radius.
-            The tile does NOT resize — the overlay covers existing content.
-        ─────────────────────────────────────────────────────────────────────── */}
-        {isDescOpen && data.description && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              background: "rgba(15,15,15,0.82)",
-              color: "rgba(255,255,255,0.92)",
-              padding: "10px 14px",
-              fontSize: 11,
-              lineHeight: 1.6,
-              borderRadius: "0 0 20px 20px",
-            }}
-          >
-            {data.description}
-          </div>
-        )}
       </div>
     </div>
   );
