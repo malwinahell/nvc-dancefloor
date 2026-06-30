@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NVC Dancefloor",
-  description: "Narzędzie do wizualizacji procesu NVC",
+  title: "Steps2Connection",
+  description: "Narzędzie do wizualizacji procesów NVC",
 };
 
 export default function RootLayout({

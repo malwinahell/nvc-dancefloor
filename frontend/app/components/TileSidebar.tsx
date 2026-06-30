@@ -154,15 +154,14 @@ function SidebarContent({
       >
         <div
           style={{
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: 700,
             letterSpacing: "0.1em",
-            textTransform: "uppercase",
             color: "#BDC3C7",
             marginBottom: 4,
           }}
         >
-          NVC Dancefloor
+          Steps2Connection
         </div>
         <div
           style={{
@@ -182,7 +181,7 @@ function SidebarContent({
             lineHeight: 1.5,
           }}
         >
-          Przeciągnij na płótno albo dotknij, żeby dodać
+          Kliknij lub przeciągnij na płótno, aby dodać
         </div>
       </div>
 
