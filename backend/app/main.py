@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import gate, me
+from app.api.routes import gate, me, tiles
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -18,9 +18,9 @@ app.add_middleware(
 
 app.include_router(gate.router, prefix="/api")
 app.include_router(me.router, prefix="/api")
+app.include_router(tiles.router, prefix="/api")
 
-# Kolejne routery (tiles, processes) dopinane tu w kroku 3 i 4:
-# app.include_router(tiles.router, prefix="/api")
+# Kolejny router (processes) dopinany tu w kroku 4:
 # app.include_router(processes.router, prefix="/api")
 
 
