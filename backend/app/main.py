@@ -22,6 +22,14 @@ app.include_router(tiles.router, prefix="/api")
 app.include_router(processes.router, prefix="/api")
 
 
+@app.get("/")
+def root() -> dict:
+    # Render domyślnie odpytuje "/" jako health check przy deployu —
+    # bez tego endpointu dostaje 404 i po kilku minutach oznacza
+    # deploy jako "Timed Out", mimo że serwer działa poprawnie.
+    return {"status": "ok", "service": "nvc-dancefloor-api"}
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
