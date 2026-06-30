@@ -128,16 +128,6 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
           >
             Nowy kafelek
           </h2>
-          <p
-            style={{
-              fontSize: 13,
-              color: "#9CA3AF",
-              margin: "4px 0 0",
-              fontWeight: 400,
-            }}
-          >
-            Stwórz własną strefę procesu
-          </p>
         </div>
 
         {/* Live preview */}
@@ -314,8 +304,8 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && canSave) handleSave();
             }}
-            placeholder="np. Granica, Strach, Pytanie..."
-            maxLength={40}
+            placeholder="Tytuł kafelka..."
+            maxLength={60}
             autoFocus
             style={inputStyle}
           />
@@ -323,18 +313,13 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
 
         {/* ── Description ────────────────────────────────────────────────────── */}
         <div style={{ marginBottom: 28 }}>
-          <label style={labelStyle}>
-            Opis{" "}
-            <span style={{ fontSize: 11, fontWeight: 400, color: "#9CA3AF" }}>
-              (opcjonalnie — pojawi się jako podpowiedź na kafelku)
-            </span>
-          </label>
+          <label style={labelStyle}>Opis</label>
           <input
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Krótka wskazówka pomocnicza..."
-            maxLength={120}
+            placeholder="Wskazówka pomocnicza..."
+            maxLength={110}
             style={inputStyle}
           />
         </div>

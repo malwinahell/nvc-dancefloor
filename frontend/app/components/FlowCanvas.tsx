@@ -203,9 +203,7 @@ function FlowCanvasInner({ onRegisterAddTile }: InnerProps) {
                   margin: "0 auto",
                 }}
               >
-                Przeciągnij kafelek z biblioteki
-                <br />
-                lub dotknij ✦ na dole ekranu
+                Kliknij lub przeciągnij kafelek z biblioteki
               </div>
             </div>
           </Panel>

@@ -289,7 +289,7 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   display: "-webkit-box",
-                  WebkitLineClamp: 2,
+                  WebkitLineClamp: 3,
                   WebkitBoxOrient: "vertical",
                   textAlign: "center",
                   lineHeight: 1.4,
