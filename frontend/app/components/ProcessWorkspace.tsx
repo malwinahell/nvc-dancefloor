@@ -12,7 +12,12 @@ import { AuthGuard } from "./AuthGuard";
 import { CenteredMessage } from "./AuthShell";
 import { api, ApiError } from "../lib/apiClient";
 import type { TileTemplate } from "../types/nvc";
-import type { CanvasData, ProcessDetail, TileCreatePayload, TileOut } from "../types/api";
+import type {
+  CanvasData,
+  ProcessDetail,
+  TileCreatePayload,
+  TileOut,
+} from "../types/api";
 
 interface ProcessWorkspaceProps {
   processId: string;
@@ -41,21 +46,27 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // ── Wczytanie procesu przy zmianie processId ────────────────────────────
+  // Nie resetujemy stanu synchronicznie na początku efektu (setState w body
+  // efektu powoduje kaskadowe rendery). Stan aktualizujemy wyłącznie
+  // w callbackach .then() / .catch() po zakończeniu fetcha.
   useEffect(() => {
     let active = true;
-    setProcess(null);
-    setLoadError(null);
-    setSaveState("idle");
 
     api.processes
       .get(processId)
       .then((p) => {
-        if (active) setProcess(p);
+        if (!active) return;
+        setLoadError(null);
+        setSaveState("idle");
+        setProcess(p);
       })
       .catch((err) => {
         if (!active) return;
+        setProcess(null);
         setLoadError(
-          err instanceof ApiError ? err.message : "Nie udało się wczytać procesu.",
+          err instanceof ApiError
+            ? err.message
+            : "Nie udało się wczytać procesu.",
         );
       });
 
@@ -66,7 +77,9 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
 
   // ── Biblioteka kafelków + galeria publiczna ─────────────────────────────
   const refreshLibrary = useCallback(() => {
-    api.tiles.library().then((tiles) => setLibraryTiles(tiles.map(tileOutToTemplate)));
+    api.tiles
+      .library()
+      .then((tiles) => setLibraryTiles(tiles.map(tileOutToTemplate)));
   }, []);
 
   const refreshGallery = useCallback(() => {
@@ -78,12 +91,13 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
     refreshGallery();
   }, [refreshLibrary, refreshGallery]);
 
-  // ── Autosave kanwasu ─────────────────────────────────────────────────────
-  // Trzymamy aktualne process.id w ref, żeby callback z FlowCanvas (debounced,
-  // może odpalić się już po zmianie processId przy szybkim przełączaniu) nie
-  // zapisał danych pod złym id.
+  // ── Ref do aktualnego processId dla debounced callbacku autosave ────────
+  // Zapisujemy w efekcie (nie podczas renderu) żeby uniknąć błędu
+  // "Cannot access refs during render" z React compiler.
   const processIdRef = useRef(processId);
-  processIdRef.current = processId;
+  useEffect(() => {
+    processIdRef.current = processId;
+  }, [processId]);
 
   const handleCanvasChange = useCallback((data: CanvasData) => {
     const targetId = processIdRef.current;
@@ -100,9 +114,12 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
 
   // ── Dodawanie kafelków na kanwas (rejestracja funkcji z FlowCanvas) ─────
   const addTileRef = useRef<((tile: TileTemplate) => void) | null>(null);
-  const handleRegisterAddTile = useCallback((fn: (tile: TileTemplate) => void) => {
-    addTileRef.current = fn;
-  }, []);
+  const handleRegisterAddTile = useCallback(
+    (fn: (tile: TileTemplate) => void) => {
+      addTileRef.current = fn;
+    },
+    [],
+  );
   const handleTileTap = useCallback((tile: TileTemplate) => {
     addTileRef.current?.(tile);
   }, []);
@@ -209,7 +226,14 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
         onFork={handleForkProcess}
       />
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
+      <div
+        style={{
+          display: "flex",
+          flex: 1,
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
         <TileSidebar
           customTiles={libraryTiles}
           galleryTiles={galleryTiles}

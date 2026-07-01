@@ -1,3 +1,5 @@
+import type { NvcNodeType } from "../types/nvc";
+
 export type Visibility = "private" | "public";
 
 // ── Kafelki ─────────────────────────────────────────────────────────────────
@@ -9,7 +11,7 @@ export interface TileOut {
   description: string | null;
   color: string;
   icon: string;
-  nvc_type: string;
+  nvc_type: NvcNodeType;
   visibility: Visibility;
   created_at: string;
   is_owner: boolean;
