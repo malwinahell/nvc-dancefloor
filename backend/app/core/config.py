@@ -19,12 +19,6 @@ class Settings(BaseSettings):
     # nie mylić z service_role key.
     supabase_jwt_secret: str
 
-    # ── Gate (hasło wejściowe do całej aplikacji) ───────────────────────────
-    gate_password: str = "kochamnvc"
-    gate_jwt_secret: str
-    gate_cookie_name: str = "nvc_gate"
-    gate_token_ttl_days: int = 30
-
     # ── CORS ──────────────────────────────────────────────────────────────
     frontend_origin: str = "http://localhost:3000"
 

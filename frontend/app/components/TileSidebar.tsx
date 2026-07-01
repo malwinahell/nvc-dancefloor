@@ -2,13 +2,16 @@
 
 import React, { useState, useEffect, DragEvent } from "react";
 import type { TileTemplate } from "../types/nvc";
+import type { TileOut } from "../types/api";
 import { DEFAULT_NVC_TILES } from "../lib/defaultTiles";
 
 interface TileSidebarProps {
   customTiles: TileTemplate[];
+  galleryTiles: TileOut[];
   onTileTap: (tile: TileTemplate) => void; // mobile: tap-to-add
   onCreateCustomTile: () => void;
   onDeleteCustomTile: (id: string) => void;
+  onAddFromGallery: (id: string) => void;
 }
 
 // ── Single draggable tile card ───────────────────────────────────────────────
@@ -123,17 +126,25 @@ function TileCard({
 // ── Shared sidebar content (rendered in both desktop + mobile) ───────────────
 
 function SidebarContent({
+  activeTab,
+  onTabChange,
   customTiles,
+  galleryTiles,
   onDragStart,
   onTap,
   onCreateCustomTile,
   onDeleteCustomTile,
+  onAddFromGallery,
 }: {
+  activeTab: "mine" | "gallery";
+  onTabChange: (tab: "mine" | "gallery") => void;
   customTiles: TileTemplate[];
+  galleryTiles: TileOut[];
   onDragStart: (e: DragEvent<HTMLDivElement>, tile: TileTemplate) => void;
   onTap: (tile: TileTemplate) => void;
   onCreateCustomTile: () => void;
   onDeleteCustomTile: (id: string) => void;
+  onAddFromGallery: (id: string) => void;
 }) {
   return (
     <div
@@ -173,107 +184,288 @@ function SidebarContent({
         >
           Biblioteka kafelków
         </div>
-        <div
-          style={{
-            fontSize: 11,
-            color: "#9CA3AF",
-            marginTop: 4,
-            lineHeight: 1.5,
-          }}
-        >
-          Kliknij lub przeciągnij na płótno, aby dodać
+
+        {/* Przełącznik: Własne kafelki / Galeria publiczna */}
+        <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+          <TabButton active={activeTab === "mine"} onClick={() => onTabChange("mine")}>
+            Własne
+          </TabButton>
+          <TabButton active={activeTab === "gallery"} onClick={() => onTabChange("gallery")}>
+            Galeria publiczna
+          </TabButton>
         </div>
       </div>
 
-      {/* Scrollable list */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }}>
-        {/* Process zones */}
-        <SectionLabel>Strefy procesu</SectionLabel>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 7,
-            marginBottom: 24,
-          }}
-        >
-          {DEFAULT_NVC_TILES.map((tile: TileTemplate) => (
-            <TileCard
-              key={tile.id}
-              tile={tile}
-              onDragStart={onDragStart}
-              onTap={onTap}
-            />
-          ))}
-        </div>
+      {activeTab === "mine" ? (
+        <MineTab
+          customTiles={customTiles}
+          onDragStart={onDragStart}
+          onTap={onTap}
+          onCreateCustomTile={onCreateCustomTile}
+          onDeleteCustomTile={onDeleteCustomTile}
+        />
+      ) : (
+        <GalleryTab galleryTiles={galleryTiles} onAddFromGallery={onAddFromGallery} />
+      )}
+    </div>
+  );
+}
 
-        {/* Custom tiles */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 10,
-          }}
-        >
-          <SectionLabel style={{ marginBottom: 0 }}>
-            Własne kafelki
-          </SectionLabel>
-          {customTiles.length > 0 && (
-            <span
-              style={{
-                fontSize: 10,
-                background: "rgba(0,0,0,0.06)",
-                borderRadius: 20,
-                padding: "2px 7px",
-                color: "#9CA3AF",
-                fontWeight: 600,
-              }}
-            >
-              {customTiles.length}
-            </span>
-          )}
-        </div>
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1,
+        padding: "7px 0",
+        borderRadius: 10,
+        border: "none",
+        cursor: "pointer",
+        fontSize: 11.5,
+        fontWeight: 700,
+        fontFamily: "inherit",
+        background: active ? "#D8B4FE" : "rgba(0,0,0,0.05)",
+        color: active ? "#4C1D95" : "#9CA3AF",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
+// ── Zakładka "Własne" ─────────────────────────────────────────────────────────
+
+function MineTab({
+  customTiles,
+  onDragStart,
+  onTap,
+  onCreateCustomTile,
+  onDeleteCustomTile,
+}: {
+  customTiles: TileTemplate[];
+  onDragStart: (e: DragEvent<HTMLDivElement>, tile: TileTemplate) => void;
+  onTap: (tile: TileTemplate) => void;
+  onCreateCustomTile: () => void;
+  onDeleteCustomTile: (id: string) => void;
+}) {
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }}>
+      {/* Process zones */}
+      <SectionLabel>Strefy procesu</SectionLabel>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 7,
+          marginBottom: 24,
+        }}
+      >
+        {DEFAULT_NVC_TILES.map((tile: TileTemplate) => (
+          <TileCard key={tile.id} tile={tile} onDragStart={onDragStart} onTap={onTap} />
+        ))}
+      </div>
+
+      {/* Custom tiles */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 10,
+        }}
+      >
+        <SectionLabel style={{ marginBottom: 0 }}>Własne kafelki</SectionLabel>
+        {customTiles.length > 0 && (
+          <span
+            style={{
+              fontSize: 10,
+              background: "rgba(0,0,0,0.06)",
+              borderRadius: 20,
+              padding: "2px 7px",
+              color: "#9CA3AF",
+              fontWeight: 600,
+            }}
+          >
+            {customTiles.length}
+          </span>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 7,
+          marginBottom: 12,
+        }}
+      >
+        {customTiles.map((tile) => (
+          <TileCard
+            key={tile.id}
+            tile={tile}
+            onDragStart={onDragStart}
+            onTap={onTap}
+            onDelete={onDeleteCustomTile}
+          />
+        ))}
+      </div>
+
+      {customTiles.length === 0 && (
         <div
           style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 7,
+            padding: "14px 12px",
+            borderRadius: 14,
+            background: "transparent",
+            border: "2px dashed rgba(0,0,0,0.07)",
+            textAlign: "center",
+            fontSize: 12,
+            color: "#C9CDD4",
             marginBottom: 12,
           }}
         >
-          {customTiles.map((tile) => (
-            <TileCard
-              key={tile.id}
-              tile={tile}
-              onDragStart={onDragStart}
-              onTap={onTap}
-              onDelete={onDeleteCustomTile}
-            />
-          ))}
+          Brak własnych kafelków
         </div>
+      )}
 
-        {customTiles.length === 0 && (
+      {/* Create button */}
+      <CreateButton onClick={onCreateCustomTile} />
+    </div>
+  );
+}
+
+// ── Zakładka "Galeria publiczna" ──────────────────────────────────────────────
+
+function GalleryTab({
+  galleryTiles,
+  onAddFromGallery,
+}: {
+  galleryTiles: TileOut[];
+  onAddFromGallery: (id: string) => void;
+}) {
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }}>
+      <div
+        style={{
+          fontSize: 11,
+          color: "#9CA3AF",
+          marginBottom: 14,
+          lineHeight: 1.5,
+        }}
+      >
+        Kafelki publiczne innych użytkowników. Dodaj do swojej biblioteki, aby
+        móc ich używać na płótnie.
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        {galleryTiles.map((tile) => (
+          <GalleryTileCard key={tile.id} tile={tile} onAdd={() => onAddFromGallery(tile.id)} />
+        ))}
+      </div>
+
+      {galleryTiles.length === 0 && (
+        <div
+          style={{
+            padding: "14px 12px",
+            borderRadius: 14,
+            background: "transparent",
+            border: "2px dashed rgba(0,0,0,0.07)",
+            textAlign: "center",
+            fontSize: 12,
+            color: "#C9CDD4",
+          }}
+        >
+          Brak nowych publicznych kafelków do dodania
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GalleryTileCard({ tile, onAdd }: { tile: TileOut; onAdd: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const hasIcon = !!tile.icon;
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: tile.color,
+        borderRadius: 16,
+        border: "1px solid rgba(0,0,0,0.05)",
+        boxShadow: hovered ? "0 8px 24px rgba(0,0,0,0.07)" : "0 2px 8px rgba(0,0,0,0.03)",
+        padding: "10px 12px",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        transition: "box-shadow 0.15s ease",
+      }}
+    >
+      {hasIcon && (
+        <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1 }}>{tile.icon}</span>
+      )}
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: "#1a1a1a",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {tile.label}
+        </div>
+        {tile.description && (
           <div
             style={{
-              padding: "14px 12px",
-              borderRadius: 14,
-              background: "transparent",
-              border: "2px dashed rgba(0,0,0,0.07)",
-              textAlign: "center",
-              fontSize: 12,
-              color: "#C9CDD4",
-              marginBottom: 12,
+              fontSize: 10,
+              color: "rgba(0,0,0,0.38)",
+              marginTop: 2,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
-            Brak własnych kafelków
+            {tile.description}
           </div>
         )}
-
-        {/* Create button */}
-        <CreateButton onClick={onCreateCustomTile} />
       </div>
+
+      <button
+        onClick={onAdd}
+        title="Dodaj do moich kafelków"
+        style={{
+          background: "rgba(255,255,255,0.7)",
+          border: "none",
+          borderRadius: "50%",
+          width: 26,
+          height: 26,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 15,
+          fontWeight: 700,
+          color: "#7C3AED",
+          flexShrink: 0,
+          padding: 0,
+        }}
+      >
+        +
+      </button>
     </div>
   );
 }
@@ -282,11 +474,14 @@ function SidebarContent({
 
 export function TileSidebar({
   customTiles,
+  galleryTiles,
   onTileTap,
   onCreateCustomTile,
   onDeleteCustomTile,
+  onAddFromGallery,
 }: TileSidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"mine" | "gallery">("mine");
 
   // Detect viewport width — replaces Tailwind md: classes.
   // Initial value is read in the useState lazy initializer (runs only on client)
@@ -313,11 +508,15 @@ export function TileSidebar({
   };
 
   const sharedProps = {
+    activeTab,
+    onTabChange: setActiveTab,
     customTiles,
+    galleryTiles,
     onDragStart,
     onTap: handleTap,
     onCreateCustomTile,
     onDeleteCustomTile,
+    onAddFromGallery,
   };
 
   return (
