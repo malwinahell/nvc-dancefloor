@@ -9,18 +9,18 @@ get_current_user:
     routy mogły zbudować klienta scoped do tego usera (patrz
     db/supabase_client.py).
 
-require_gate:
-    Sprawdza httpOnly cookie wystawione po przejściu przez ekran hasła.
-    Niezależne od logowania — patrz core/gate.py.
+Bramka hasłem (gate) NIE jest weryfikowana po stronie FastAPI — front i
+backend mogą siedzieć na różnych domenach, więc cookie ustawiane przez
+backend nie byłoby widoczne dla middleware Next.js. Gate jest w całości
+zaimplementowany w Next.js (Route Handler + middleware), patrz frontend.
 """
 
 from dataclasses import dataclass
 
 import jwt
-from fastapi import Header, HTTPException, Request, status
+from fastapi import Header, HTTPException, status
 
 from app.core.config import get_settings
-from app.core.gate import verify_gate_token
 
 
 @dataclass
@@ -67,19 +67,3 @@ def get_current_user(
         email=payload.get("email"),
         access_token=token,
     )
-
-
-def require_gate(request: Request) -> None:
-    """
-    Dependency do podpięcia pod routery, które mają być dostępne dopiero
-    po przejściu bramki hasłem (w praktyce: wszystkie poza /gate/verify
-    i /auth/*, bo logowanie/rejestracja też powinny być za bramką zgodnie
-    z wymaganiem — bramka jest PRZED rejestracją).
-    """
-    settings = get_settings()
-    token = request.cookies.get(settings.gate_cookie_name)
-    if not verify_gate_token(token):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Dostęp zablokowany bramką wejściową.",
-        )

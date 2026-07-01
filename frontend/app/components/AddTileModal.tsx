@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import type { TileTemplate } from "../types/nvc";
+import type { TileCreatePayload } from "../types/api";
 
 // NOTE: remounted via key prop in page.tsx on every open — state always fresh,
 // no setState-in-effect needed.
@@ -9,7 +9,7 @@ import type { TileTemplate } from "../types/nvc";
 interface AddTileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (tile: Omit<TileTemplate, "id">) => void;
+  onSave: (tile: TileCreatePayload) => void;
 }
 
 const PRESET_COLORS = [
@@ -53,6 +53,7 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState("#D8B4FE");
   const [icon, setIcon] = useState("💡");
+  const [visibility, setVisibility] = useState<"private" | "public">("private");
 
   // Close on Escape
   useEffect(() => {
@@ -73,8 +74,8 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
       description: description.trim() || undefined,
       color,
       icon, // '' = no icon, handled in NvcNode via !!data.icon check
-      nvcType: "custom",
-      isDefault: false,
+      nvc_type: "custom",
+      visibility,
     });
   };
 
@@ -292,6 +293,27 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
           </div>
         </div>
 
+        {/* ── Widoczność ─────────────────────────────────────────────────────── */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle}>Widoczność</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <VisibilityOption
+              active={visibility === "private"}
+              onClick={() => setVisibility("private")}
+              icon="🔒"
+              title="Prywatny"
+              subtitle="Tylko Ty go widzisz"
+            />
+            <VisibilityOption
+              active={visibility === "public"}
+              onClick={() => setVisibility("public")}
+              icon="🌐"
+              title="Publiczny"
+              subtitle="Inni mogą go dodać"
+            />
+          </div>
+        </div>
+
         {/* ── Label ──────────────────────────────────────────────────────────── */}
         <div style={{ marginBottom: 16 }}>
           <label style={labelStyle}>
@@ -347,6 +369,59 @@ export function AddTileModal({ isOpen, onClose, onSave }: AddTileModalProps) {
 }
 
 // ── Shared mini-styles ────────────────────────────────────────────────────────
+
+function VisibilityOption({
+  active,
+  onClick,
+  icon,
+  title,
+  subtitle,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: string;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "10px 12px",
+        borderRadius: 14,
+        border: active ? "2px solid #7C3AED" : "1.5px solid rgba(0,0,0,0.08)",
+        background: active ? "rgba(124,58,237,0.06)" : "white",
+        cursor: "pointer",
+        textAlign: "left",
+        fontFamily: '"Plus Jakarta Sans","Inter",sans-serif',
+        transition: "border 0.12s, background 0.12s",
+      }}
+    >
+      <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{icon}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: active ? "#7C3AED" : "#1a1a1a" }}>
+          {title}
+        </div>
+        <div
+          style={{
+            fontSize: 10,
+            color: "#9CA3AF",
+            marginTop: 1,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {subtitle}
+        </div>
+      </div>
+    </button>
+  );
+}
 
 const labelStyle: React.CSSProperties = {
   display: "block",
