@@ -4,6 +4,7 @@ import React, { useCallback } from "react";
 import { useReactFlow } from "@xyflow/react";
 import type { Node } from "@xyflow/react";
 import type { NvcNodeData } from "../types/nvc";
+import { useMobile } from "../hooks/useMobile";
 import { TILE_WIDTH, TILE_HEIGHT } from "../helpers/canvasConfig";
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ function darkenHex(hex: string, amount = 0.22): string {
   return `rgb(${r},${g},${b})`;
 }
 
-// ── Ring SVG (donut) ──────────────────────────────────────────────────────────
+// ── Ring SVG ──────────────────────────────────────────────────────────────────
 
 function RingIcon({ active, color }: { active: boolean; color: string }) {
   return (
@@ -63,14 +64,13 @@ interface NvcNodeProps {
 
 export function NvcNode({ id, data, selected }: NvcNodeProps) {
   const { setNodes } = useReactFlow();
+  const isMobile = useMobile();
 
   const handleDelete = useCallback(() => {
     setNodes((nds: Node[]) => nds.filter((n) => n.id !== id));
   }, [id, setNodes]);
 
   const handleSetAsBase = useCallback(() => {
-    // Toggle isBase on this tile only — other tiles are unaffected.
-    // Multiple tiles can be base simultaneously.
     setNodes((nds: Node[]) =>
       nds.map((n) =>
         n.id === id
@@ -87,27 +87,34 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
   }, [id, setNodes]);
 
   const hasIcon = !!data.icon;
-
-  // Base tile uses a thicker, darkened-colour border.
-  // Shadow is intentionally NOT part of base styling — it's unified for all tiles.
   const baseBorder = `3px solid ${darkenHex(data.color)}`;
-
-  // ── Shadow logic ─────────────────────────────────────────────────────────
-  // Same shadow for every tile when selected; soft default when not selected.
-  // Base tile gets NO special shadow — its distinction is the border alone.
   const shadow = selected
     ? "0 0 0 4px rgba(124,58,237,0.1), 0 10px 32px rgba(0,0,0,0.08)"
     : "0 8px 24px rgba(0,0,0,0.05)";
-
-  // ── Border logic ─────────────────────────────────────────────────────────
-  // Base tile: always coloured border (overrides selection border).
-  // Non-base selected: blue tint border.
-  // Default: near-invisible border.
   const border = data.isBase
     ? baseBorder
     : selected
-      ? "1px solid rgba(110, 110, 110, 0.5)"
+      ? "1px solid rgba(110,110,110,0.5)"
       : "1px solid rgba(0,0,0,0.06)";
+
+  // Na mobile panel akcji ląduje POD kafelkiem (nie nad), żeby nie wychodził
+  // poza viewport gdy kafelek jest blisko górnej krawędzi ekranu.
+  // Przyciski mają 44px (Apple HIG minimum) zamiast desktopowych 32px.
+  const btnSize = isMobile ? 44 : 32;
+  const panelAbove: React.CSSProperties = {
+    position: "absolute",
+    bottom: "100%",
+    left: "50%",
+    transform: "translateX(-50%)",
+    marginBottom: 8,
+  };
+  const panelBelow: React.CSSProperties = {
+    position: "absolute",
+    top: "100%",
+    left: "50%",
+    transform: "translateX(-50%)",
+    marginTop: 8,
+  };
 
   return (
     <div
@@ -118,17 +125,10 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
         fontFamily: '"Plus Jakarta Sans","Inter",sans-serif',
       }}
     >
-      {/* ── Floating action panel ────────────────────────────────────────────
-          Visible only when node is selected.
-          opacity/pointerEvents toggle — no layout shift.
-      ─────────────────────────────────────────────────────────────────────── */}
+      {/* ── Panel akcji ──────────────────────────────────────────────────── */}
       <div
         style={{
-          position: "absolute",
-          bottom: "100%",
-          left: "50%",
-          transform: "translateX(-50%)",
-          marginBottom: 8,
+          ...(isMobile ? panelBelow : panelAbove),
           background: "rgba(255,255,255,0.97)",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
@@ -137,8 +137,8 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
           boxShadow: "0 4px 18px rgba(0,0,0,0.1)",
           display: "flex",
           alignItems: "center",
-          gap: 2,
-          padding: "4px 6px",
+          gap: isMobile ? 4 : 2,
+          padding: isMobile ? "6px 8px" : "4px 6px",
           zIndex: 1000,
           pointerEvents: selected ? "all" : "none",
           opacity: selected ? 1 : 0,
@@ -146,9 +146,10 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
           whiteSpace: "nowrap",
         }}
       >
-        {/* Ring icon — mark/unmark as base tile */}
+        {/* Wyróżnij / odznacz */}
         <button
           onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             handleSetAsBase();
@@ -158,8 +159,8 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: 32,
-            height: 32,
+            width: btnSize,
+            height: btnSize,
             borderRadius: "50%",
             border: "none",
             background: data.isBase
@@ -183,7 +184,6 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
           <RingIcon active={!!data.isBase} color={data.color} />
         </button>
 
-        {/* Separator */}
         <div
           style={{
             width: 1,
@@ -193,9 +193,10 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
           }}
         />
 
-        {/* Delete */}
+        {/* Usuń */}
         <button
           onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             handleDelete();
@@ -205,13 +206,13 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: 32,
-            height: 32,
+            width: btnSize,
+            height: btnSize,
             borderRadius: "50%",
             border: "none",
             background: "transparent",
             cursor: "pointer",
-            fontSize: 15,
+            fontSize: isMobile ? 18 : 15,
             padding: 0,
             transition: "background 0.15s",
           }}
@@ -228,7 +229,7 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
         </button>
       </div>
 
-      {/* ── Tile card ─────────────────────────────────────────────────────── */}
+      {/* ── Kafelek ────────────────────────────────────────────────────────── */}
       <div
         style={{
           background: data.color,
@@ -244,9 +245,14 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
           justifyContent: "center",
           transition: "box-shadow 0.2s ease, border-color 0.2s ease",
           cursor: "grab",
+          // Aktywny obszar dotykowy — zwiększamy wirtualny obszar tap-a
+          // (padding kompensowany przez ujemny margin — technika "invisible tap area")
+          ...(isMobile && {
+            margin: "-4px",
+            padding: "4px calc(14px + 4px)",
+          }),
         }}
       >
-        {/* Icon (vertically centred) + text (horizontally centred) */}
         <div
           style={{
             display: "flex",
@@ -259,9 +265,7 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
               {data.icon}
             </span>
           )}
-
           <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
-            {/* Title — up to 2 lines */}
             <div
               style={{
                 fontSize: 13,
@@ -277,8 +281,6 @@ export function NvcNode({ id, data, selected }: NvcNodeProps) {
             >
               {data.label}
             </div>
-
-            {/* Description — max 2 lines, ellipsis on overflow */}
             {data.description && (
               <p
                 style={{

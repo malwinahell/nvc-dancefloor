@@ -10,6 +10,7 @@ import { TopBar, type SaveState } from "./TopBar";
 import { ProcessDrawer } from "./ProcessDrawer";
 import { AuthGuard } from "./AuthGuard";
 import { CenteredMessage } from "./AuthShell";
+import { ToastProvider, useToast } from "./Toast";
 import { api, ApiError } from "../lib/apiClient";
 import type { TileTemplate } from "../types/nvc";
 import type {
@@ -19,20 +20,27 @@ import type {
   TileOut,
 } from "../types/api";
 
+// ── Public entry point — owija całość w ToastProvider i AuthGuard ─────────────
+
 interface ProcessWorkspaceProps {
   processId: string;
 }
 
 export function ProcessWorkspace({ processId }: ProcessWorkspaceProps) {
   return (
-    <AuthGuard>
-      <ProcessWorkspaceInner processId={processId} />
-    </AuthGuard>
+    <ToastProvider>
+      <AuthGuard>
+        <ProcessWorkspaceInner processId={processId} />
+      </AuthGuard>
+    </ToastProvider>
   );
 }
 
+// ── Wewnętrzny komponent — ma dostęp do useToast() ───────────────────────────
+
 function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
   const router = useRouter();
+  const { showToast } = useToast();
 
   const [process, setProcess] = useState<ProcessDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -45,13 +53,9 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
   const [modalKey, setModalKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // ── Wczytanie procesu przy zmianie processId ────────────────────────────
-  // Nie resetujemy stanu synchronicznie na początku efektu (setState w body
-  // efektu powoduje kaskadowe rendery). Stan aktualizujemy wyłącznie
-  // w callbackach .then() / .catch() po zakończeniu fetcha.
+  // ── Wczytanie procesu ────────────────────────────────────────────────────
   useEffect(() => {
     let active = true;
-
     api.processes
       .get(processId)
       .then((p) => {
@@ -69,13 +73,12 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
             : "Nie udało się wczytać procesu.",
         );
       });
-
     return () => {
       active = false;
     };
   }, [processId]);
 
-  // ── Biblioteka kafelków + galeria publiczna ─────────────────────────────
+  // ── Biblioteka + galeria ────────────────────────────────────────────────
   const refreshLibrary = useCallback(() => {
     api.tiles
       .library()
@@ -91,28 +94,50 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
     refreshGallery();
   }, [refreshLibrary, refreshGallery]);
 
-  // ── Ref do aktualnego processId dla debounced callbacku autosave ────────
-  // Zapisujemy w efekcie (nie podczas renderu) żeby uniknąć błędu
-  // "Cannot access refs during render" z React compiler.
+  // ── Autosave ─────────────────────────────────────────────────────────────
+  // Ref aktualizowany w efekcie (nie podczas renderu) — patrz komentarz niżej
   const processIdRef = useRef(processId);
   useEffect(() => {
     processIdRef.current = processId;
   }, [processId]);
 
-  const handleCanvasChange = useCallback((data: CanvasData) => {
-    const targetId = processIdRef.current;
-    setSaveState("saving");
-    api.processes
-      .update(targetId, { canvas_data: data })
-      .then(() => {
-        if (processIdRef.current === targetId) setSaveState("saved");
-      })
-      .catch(() => {
-        if (processIdRef.current === targetId) setSaveState("error");
-      });
-  }, []);
+  // Trzymamy ostatnie canvas_data żeby retry mógł je ponownie wysłać
+  // bez potrzeby przekazywania go z FlowCanvas jeszcze raz.
+  const lastCanvasDataRef = useRef<CanvasData | null>(null);
 
-  // ── Dodawanie kafelków na kanwas (rejestracja funkcji z FlowCanvas) ─────
+  const saveCanvas = useCallback(
+    (data: CanvasData, targetId: string) => {
+      setSaveState("saving");
+      api.processes
+        .update(targetId, { canvas_data: data })
+        .then(() => {
+          if (processIdRef.current === targetId) setSaveState("saved");
+        })
+        .catch(() => {
+          if (processIdRef.current === targetId) {
+            setSaveState("error");
+            showToast('Nie udało się zapisać. Kliknij "Ponów".', "error");
+          }
+        });
+    },
+    [showToast],
+  );
+
+  const handleCanvasChange = useCallback(
+    (data: CanvasData) => {
+      lastCanvasDataRef.current = data;
+      saveCanvas(data, processIdRef.current);
+    },
+    [saveCanvas],
+  );
+
+  const handleRetrySave = useCallback(() => {
+    if (lastCanvasDataRef.current) {
+      saveCanvas(lastCanvasDataRef.current, processIdRef.current);
+    }
+  }, [saveCanvas]);
+
+  // ── Dodawanie kafelków na kanwas ────────────────────────────────────────
   const addTileRef = useRef<((tile: TileTemplate) => void) | null>(null);
   const handleRegisterAddTile = useCallback(
     (fn: (tile: TileTemplate) => void) => {
@@ -124,7 +149,7 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
     addTileRef.current?.(tile);
   }, []);
 
-  // ── Tworzenie / usuwanie / dodawanie kafelków ───────────────────────────
+  // ── Kafelki: tworzenie / usuwanie / galeria ────────────────────────────
   const openModal = useCallback(() => {
     setModalKey((k) => k + 1);
     setModalOpen(true);
@@ -132,60 +157,105 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
 
   const handleSaveCustomTile = useCallback(
     (payload: TileCreatePayload) => {
-      api.tiles.create(payload).then(() => {
-        refreshLibrary();
-        if (payload.visibility === "public") refreshGallery();
-        setModalOpen(false);
-      });
+      api.tiles
+        .create(payload)
+        .then(() => {
+          refreshLibrary();
+          if (payload.visibility === "public") refreshGallery();
+          setModalOpen(false);
+          showToast("Kafelek utworzony.", "success");
+        })
+        .catch(() => showToast("Nie udało się utworzyć kafelka.", "error"));
     },
-    [refreshLibrary, refreshGallery],
+    [refreshLibrary, refreshGallery, showToast],
   );
 
   const handleDeleteCustomTile = useCallback(
     (id: string) => {
-      api.tiles.remove(id).then(() => {
-        refreshLibrary();
-        refreshGallery();
-      });
+      api.tiles
+        .remove(id)
+        .then(() => {
+          refreshLibrary();
+          refreshGallery();
+          showToast("Kafelek usunięty.", "success");
+        })
+        .catch(() => showToast("Nie udało się usunąć kafelka.", "error"));
     },
-    [refreshLibrary, refreshGallery],
+    [refreshLibrary, refreshGallery, showToast],
   );
 
   const handleAddFromGallery = useCallback(
     (id: string) => {
-      api.tiles.addToLibrary(id).then(() => {
-        refreshLibrary();
-        refreshGallery();
-      });
+      api.tiles
+        .addToLibrary(id)
+        .then(() => {
+          refreshLibrary();
+          refreshGallery();
+          showToast("Kafelek dodany do biblioteki.", "success");
+        })
+        .catch(() => showToast("Nie udało się dodać kafelka.", "error"));
     },
-    [refreshLibrary, refreshGallery],
+    [refreshLibrary, refreshGallery, showToast],
   );
 
-  // ── Tytuł / widoczność / nawigacja procesu ──────────────────────────────
+  // ── Proces: tytuł / opis / widoczność / nawigacja ─────────────────────
   const handleRenameProcess = useCallback(
     (title: string) => {
       setProcess((prev) => (prev ? { ...prev, title } : prev));
-      api.processes.update(processId, { title }).catch(() => {});
+      api.processes
+        .update(processId, { title })
+        .catch(() => showToast("Nie udało się zmienić nazwy.", "error"));
     },
-    [processId],
+    [processId, showToast],
+  );
+
+  const handleEditDescription = useCallback(
+    (description: string) => {
+      setProcess((prev) =>
+        prev ? { ...prev, description: description || null } : prev,
+      );
+      api.processes
+        .update(processId, { description })
+        .catch(() => showToast("Nie udało się zapisać opisu.", "error"));
+    },
+    [processId, showToast],
   );
 
   const handleToggleVisibility = useCallback(() => {
     setProcess((prev) => {
       if (!prev) return prev;
       const visibility = prev.visibility === "public" ? "private" : "public";
-      api.processes.update(prev.id, { visibility }).catch(() => {});
+      api.processes
+        .update(prev.id, { visibility })
+        .then(() =>
+          showToast(
+            visibility === "public"
+              ? "Proces jest teraz publiczny."
+              : "Proces jest prywatny.",
+            "info",
+          ),
+        )
+        .catch(() => showToast("Nie udało się zmienić widoczności.", "error"));
       return { ...prev, visibility };
     });
-  }, []);
+  }, [showToast]);
 
   const handleNewProcess = useCallback(() => {
-    api.processes.create({}).then((p) => router.push(`/proces/${p.id}`));
-  }, [router]);
+    api.processes
+      .create({})
+      .then((p) => router.push(`/proces/${p.id}`))
+      .catch(() => showToast("Nie udało się utworzyć procesu.", "error"));
+  }, [router, showToast]);
 
   const handleForkProcess = useCallback(() => {
-    api.processes.fork(processId).then((p) => router.push(`/proces/${p.id}`));
-  }, [processId, router]);
+    api.processes
+      .fork(processId)
+      .then((p) => {
+        showToast("Zapisano jako Twój proces.", "success");
+        router.push(`/proces/${p.id}`);
+      })
+      .catch(() => showToast("Nie udało się skopiować procesu.", "error"));
+  }, [processId, router, showToast]);
 
   const handleOpenProcess = useCallback(
     (id: string) => {
@@ -195,13 +265,24 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
     [router],
   );
 
-  // ── Stany ładowania / błędu ──────────────────────────────────────────────
-  if (loadError) {
-    return <CenteredMessage>{loadError}</CenteredMessage>;
-  }
-  if (!process) {
+  // Gdy aktualnie otwarty proces zostanie usunięty z drawera —
+  // tworzymy nowy pusty i przechodzimy do niego.
+  const handleProcessDeleted = useCallback(
+    (deletedId: string) => {
+      if (deletedId === processId) {
+        api.processes
+          .create({})
+          .then((p) => router.replace(`/proces/${p.id}`))
+          .catch(() => router.replace("/"));
+      }
+    },
+    [processId, router],
+  );
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  if (loadError) return <CenteredMessage>{loadError}</CenteredMessage>;
+  if (!process)
     return <CenteredMessage>Wczytywanie procesu...</CenteredMessage>;
-  }
 
   return (
     <div
@@ -216,14 +297,17 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
     >
       <TopBar
         title={process.title}
+        description={process.description}
         visibility={process.visibility}
         isOwner={process.is_owner}
         saveState={saveState}
         onRename={handleRenameProcess}
+        onEditDescription={handleEditDescription}
         onToggleVisibility={handleToggleVisibility}
         onOpenDrawer={() => setDrawerOpen(true)}
         onNewProcess={handleNewProcess}
         onFork={handleForkProcess}
+        onRetrySave={handleRetrySave}
       />
 
       <div
@@ -245,17 +329,12 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
 
         <main style={{ flex: 1, overflow: "hidden", position: "relative" }}>
           <FlowCanvas
-            // key={process.id} wymusza pełny remount FlowCanvas przy zmianie
-            // procesu — celowo, żeby wewnętrzny stan useNodesState nie
-            // "przeciekał" między różnymi procesami przy nawigacji w drawerze.
             key={process.id}
             onRegisterAddTile={handleRegisterAddTile}
-            // canvas_data.nodes jest typowane jako unknown[] po stronie API
-            // (JSONB bez narzuconej struktury) — tu wiemy, że to, co backend
-            // oddał, zostało zapisane wcześniej właśnie przez ten komponent,
-            // więc kształt jest zgodny z tym, czego oczekuje FlowCanvas.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             initialNodes={process.canvas_data.nodes as any}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            initialEdges={process.canvas_data.edges as any}
             initialViewport={process.canvas_data.viewport}
             onChange={process.is_owner ? handleCanvasChange : undefined}
           />
@@ -275,10 +354,13 @@ function ProcessWorkspaceInner({ processId }: ProcessWorkspaceProps) {
         onOpenProcess={handleOpenProcess}
         onNewProcess={handleNewProcess}
         currentProcessId={process.id}
+        onProcessDeleted={handleProcessDeleted}
       />
     </div>
   );
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function tileOutToTemplate(t: TileOut): TileTemplate {
   return {

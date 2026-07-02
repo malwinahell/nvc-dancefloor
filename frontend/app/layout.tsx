@@ -1,9 +1,26 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+  variable: "--font-plus-jakarta-sans",
+});
 
 export const metadata: Metadata = {
   title: "Steps2Connection",
   description: "Narzędzie do wizualizacji procesów NVC",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#F9F9F7",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -12,27 +29,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    /*
-      lang="pl" — Polish locale for screen readers
-      style colorScheme="light" — tells the browser to always render
-      system UI (scrollbars, inputs, form elements) in light mode,
-      even when the OS is set to dark mode
-    */
-    <html lang="pl" style={{ colorScheme: "light" }}>
-      <head>
-        {/* Plus Jakarta Sans — primary typeface from the design system */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin=""
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body style={{ margin: 0, padding: 0, background: "#F9F9F7" }}>
+    <html
+      lang="pl"
+      className={plusJakartaSans.variable}
+      style={{ colorScheme: "light" }}
+    >
+      <body
+        style={{
+          margin: 0,
+          padding: 0,
+          background: "#F9F9F7",
+          fontFamily: `var(--font-plus-jakarta-sans), "Inter", sans-serif`,
+        }}
+      >
         {children}
       </body>
     </html>

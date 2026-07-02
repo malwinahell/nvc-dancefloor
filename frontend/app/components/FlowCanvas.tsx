@@ -4,6 +4,8 @@ import React, { useCallback } from "react";
 import {
   ReactFlow,
   useNodesState,
+  useEdgesState,
+  addEdge,
   Controls,
   Background,
   BackgroundVariant,
@@ -11,12 +13,13 @@ import {
   useReactFlow,
   Panel,
 } from "@xyflow/react";
-import type { Node, Edge, ReactFlowInstance } from "@xyflow/react";
+import type { Connection, Node, Edge, ReactFlowInstance } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { nodeTypes } from "./NvcNode";
 import type { NvcNodeData, TileTemplate } from "../types/nvc";
 import type { CanvasData } from "../types/api";
+import { useMobile } from "../hooks/useMobile";
 import { CELL_SIZE } from "../helpers/canvasConfig";
 
 type NvcFlowNode = Node<NvcNodeData, "nvcNode">;
@@ -25,15 +28,24 @@ type FlowViewport = { x: number; y: number; zoom: number };
 let _nodeCounter = 1;
 const nextId = () => `nvc_${Date.now()}_${_nodeCounter++}`;
 
-// Debounce zapisu — kolejne zmiany (przesuwanie, dodawanie) nie wywołują
-// requestu po każdym pixelu, tylko 600ms po ostatniej zmianie.
 const AUTOSAVE_DEBOUNCE_MS = 600;
+
+// Domyślny styl krawędzi — linia bez strzałki, zgodna z design systemem
+const DEFAULT_EDGE_OPTIONS = {
+  type: "smoothstep",
+  style: {
+    stroke: "#BDC3C7",
+    strokeWidth: 2,
+  },
+  // markerEnd: undefined — brak strzałki, tylko linia
+};
 
 // ── Inner canvas ─────────────────────────────────────────────────────────────
 
 interface InnerProps {
   onRegisterAddTile: (fn: (tile: TileTemplate) => void) => void;
   initialNodes?: NvcFlowNode[];
+  initialEdges?: Edge[];
   initialViewport?: FlowViewport;
   onChange?: (data: CanvasData) => void;
 }
@@ -41,25 +53,42 @@ interface InnerProps {
 function FlowCanvasInner({
   onRegisterAddTile,
   initialNodes,
+  initialEdges,
   initialViewport,
   onChange,
 }: InnerProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<NvcFlowNode>(
     initialNodes ?? [],
   );
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(
+    initialEdges ?? [],
+  );
   const { screenToFlowPosition, getViewport } = useReactFlow();
+  const isMobile = useMobile();
+
+  // Tryb łączenia na mobile: tap kafelka A → zostaje jako źródło (connectSource),
+  // tap kafelka B → tworzy krawędź A→B. Na desktop standard drag-from-handle.
+  const [connectSource, setConnectSource] = React.useState<string | null>(null);
 
   // ── Autosave ──────────────────────────────────────────────────────────────
-  // nodesRef trzyma najświeższy stan dla callbacków wywoływanych spoza
-  // renderu (debounce timer, onMoveEnd) bez domykania nad nieaktualnym `nodes`.
   const nodesRef = React.useRef(nodes);
-  nodesRef.current = nodes;
+  const edgesRef = React.useRef(edges);
   const onChangeRef = React.useRef(onChange);
-  onChangeRef.current = onChange;
-  const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Pomijamy zapis wywołany samym zamontowaniem komponentu (initialNodes) —
-  // nie ma sensu odsyłać do API identycznych danych, które właśnie stamtąd przyszły.
+  const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const skippedFirstRun = React.useRef(false);
+
+  // Refy aktualizowane w efekcie (nie podczas renderu) — wymóg React compiler
+  React.useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  React.useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+  React.useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   const scheduleSave = useCallback(() => {
     if (!onChangeRef.current) return;
@@ -68,7 +97,7 @@ function FlowCanvasInner({
       const vp = getViewport();
       onChangeRef.current?.({
         nodes: nodesRef.current,
-        edges: [],
+        edges: edgesRef.current,
         viewport: vp,
       });
     }, AUTOSAVE_DEBOUNCE_MS);
@@ -80,7 +109,7 @@ function FlowCanvasInner({
       return;
     }
     scheduleSave();
-  }, [nodes, scheduleSave]);
+  }, [nodes, edges, scheduleSave]);
 
   React.useEffect(() => {
     return () => {
@@ -88,10 +117,26 @@ function FlowCanvasInner({
     };
   }, []);
 
+  // ── Połączenia ────────────────────────────────────────────────────────────
+  // Użytkownik sam łączy kafelki przeciągając z handlera do handlera.
+  // addEdge deduplikuje — nie można połączyć tych samych węzłów dwa razy.
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...connection,
+            type: "smoothstep",
+            style: { stroke: "#BDC3C7", strokeWidth: 2 },
+          },
+          eds,
+        ),
+      );
+    },
+    [setEdges],
+  );
+
   // ── Centre viewport on mount ─────────────────────────────────────────────
-  // nodeOrigin=[0.5,0.5] means node.position = tile CENTER.
-  // Jeśli wczytujemy istniejący proces — przywracamy zapisany viewport.
-  // Dla nowego, pustego procesu — centrujemy widok na środku płótna.
   const handleInit = useCallback(
     (instance: ReactFlowInstance<NvcFlowNode, Edge>) => {
       if (initialViewport) {
@@ -108,9 +153,6 @@ function FlowCanvasInner({
   );
 
   // ── Add tile ──────────────────────────────────────────────────────────────
-  // Because nodeOrigin=[0.5, 0.5] the x/y we pass IS the tile's visual centre.
-  // snapToGrid will then snap that centre to the nearest CELL_SIZE grid point.
-
   const addTileAtPosition = useCallback(
     (tile: TileTemplate, x: number, y: number) => {
       setNodes((nds) => {
@@ -120,7 +162,7 @@ function FlowCanvasInner({
           {
             id: nextId(),
             type: "nvcNode" as const,
-            position: { x, y }, // interpreted as CENTRE by nodeOrigin=[0.5,0.5]
+            position: { x, y },
             data: {
               label: tile.label,
               nvcType: tile.nvcType,
@@ -136,14 +178,12 @@ function FlowCanvasInner({
     [setNodes],
   );
 
-  // Mobile tap-to-add: pass viewport centre directly (= tile centre)
   const addTileAtCenter = useCallback(
     (tile: TileTemplate) => {
       const vp = getViewport();
       const cx = (window.innerWidth / 2 - vp.x) / vp.zoom;
       const cy = (window.innerHeight / 2 - vp.y) / vp.zoom;
       const jitter = () => (Math.random() - 0.5) * 80;
-      // No half-dimension subtraction needed — position IS the centre
       addTileAtPosition(tile, cx + jitter(), cy + jitter());
     },
     [getViewport, addTileAtPosition],
@@ -154,9 +194,6 @@ function FlowCanvasInner({
   }, [onRegisterAddTile, addTileAtCenter]);
 
   // ── Drag-and-drop ─────────────────────────────────────────────────────────
-  // screenToFlowPosition gives the cursor position in flow coords;
-  // with nodeOrigin=[0.5,0.5] the tile will appear centred on the cursor.
-
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -174,37 +211,119 @@ function FlowCanvasInner({
     [screenToFlowPosition, addTileAtPosition],
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Mobile: łączenie kafelków przez dwa kolejne tap-y ───────────────────
+  // Na desktop użytkownik przeciąga z handlera — zostawiamy standardowe onConnect.
+  // Na mobile handlery są zbyt małe, więc: tap A = zaznacz źródło,
+  // tap B = utwórz połączenie A→B, tap tego samego = anuluj wybór.
+  const handleNodeClick = useCallback(
+    (_: React.MouseEvent, node: NvcFlowNode) => {
+      if (!isMobile) return;
+      if (connectSource === null) {
+        setConnectSource(node.id);
+      } else if (connectSource === node.id) {
+        setConnectSource(null);
+      } else {
+        setEdges((eds) =>
+          addEdge(
+            {
+              id: `e_${connectSource}_${node.id}_${Date.now()}`,
+              source: connectSource,
+              target: node.id,
+              type: "smoothstep",
+              style: { stroke: "#BDC3C7", strokeWidth: 2 },
+            },
+            eds,
+          ),
+        );
+        setConnectSource(null);
+      }
+    },
+    [isMobile, connectSource, setEdges],
+  );
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ width: "100%", height: "100%" }}>
+    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+      {/* Pasek trybu łączenia (mobile) */}
+      {isMobile && (
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 10,
+            pointerEvents: "none",
+          }}
+        >
+          {connectSource ? (
+            <div
+              style={{
+                background: "#D8B4FE",
+                color: "#4C1D95",
+                borderRadius: 20,
+                padding: "6px 16px",
+                fontSize: 12,
+                fontWeight: 700,
+                fontFamily: '"Plus Jakarta Sans","Inter",sans-serif',
+                boxShadow: "0 4px 16px rgba(124,58,237,0.25)",
+                pointerEvents: "all",
+              }}
+            >
+              Dotknij drugi kafelek, aby połączyć ✦
+              <button
+                onClick={() => setConnectSource(null)}
+                style={{
+                  marginLeft: 8,
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  color: "#4C1D95",
+                  fontWeight: 700,
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
+
       <ReactFlow
         nodes={nodes}
-        edges={[]}
+        edges={edges}
         onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onNodeClick={handleNodeClick}
         onDrop={onDrop}
         onDragOver={onDragOver}
-        onConnect={() => {}}
         onInit={handleInit}
         onMoveEnd={scheduleSave}
         nodeTypes={nodeTypes}
-        /*
-          nodeOrigin=[0.5, 0.5]: the node's `position` is its CENTRE, not its
-          top-left corner. Combined with snapToGrid this centres tiles on grid
-          intersections instead of snapping their top-left to them.
-        */
+        defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
         nodeOrigin={[0.5, 0.5]}
         snapToGrid
         snapGrid={[CELL_SIZE, CELL_SIZE]}
         deleteKeyCode={["Backspace", "Delete"]}
-        style={{ background: "#F9F9F7" }}
+        // Na mobile jeden palec = przesuwanie canvasu (pan), nie zaznaczanie.
+        // Zaznaczanie odbywa się przez tap (onNodeClick), a łączenie przez
+        // tryb connectSource. Na desktop zachowujemy standardowe zachowanie.
+        panOnDrag={true}
+        selectionOnDrag={!isMobile}
+        // Wskazówka wizualna dla trybu łączenia — podświetl kafelek źródłowy
+        nodesFocusable={true}
+        style={{
+          background: "#F9F9F7",
+          // Wyróżniamy kafelek-źródło kolorem ring
+          ...(connectSource &&
+            ({
+              "--node-source-id": connectSource,
+            } as React.CSSProperties)),
+        }}
         proOptions={{ hideAttribution: false }}
       >
-        {/*
-          Background: dots every CELL_SIZE px.
-          Each dot = a valid tile-centre snap point.
-          Minor dots at half-interval mark the pyramid offset positions.
-        */}
         <Background
           id="bg-minor"
           variant={BackgroundVariant.Dots}
@@ -279,6 +398,7 @@ function FlowCanvasInner({
 interface FlowCanvasProps {
   onRegisterAddTile: (fn: (tile: TileTemplate) => void) => void;
   initialNodes?: NvcFlowNode[];
+  initialEdges?: Edge[];
   initialViewport?: FlowViewport;
   onChange?: (data: CanvasData) => void;
 }
@@ -286,6 +406,7 @@ interface FlowCanvasProps {
 export default function FlowCanvas({
   onRegisterAddTile,
   initialNodes,
+  initialEdges,
   initialViewport,
   onChange,
 }: FlowCanvasProps) {
@@ -294,6 +415,7 @@ export default function FlowCanvas({
       <FlowCanvasInner
         onRegisterAddTile={onRegisterAddTile}
         initialNodes={initialNodes}
+        initialEdges={initialEdges}
         initialViewport={initialViewport}
         onChange={onChange}
       />
