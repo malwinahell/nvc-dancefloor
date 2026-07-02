@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, DragEvent } from "react";
+import React, { useState, DragEvent } from "react";
 import type { TileTemplate } from "../types/nvc";
 import type { TileOut } from "../types/api";
+import { useMobile } from "../hooks/useMobile";
 import { DEFAULT_NVC_TILES } from "../lib/defaultTiles";
 
 interface TileSidebarProps {
@@ -187,10 +188,16 @@ function SidebarContent({
 
         {/* Przełącznik: Własne kafelki / Galeria publiczna */}
         <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
-          <TabButton active={activeTab === "mine"} onClick={() => onTabChange("mine")}>
+          <TabButton
+            active={activeTab === "mine"}
+            onClick={() => onTabChange("mine")}
+          >
             Własne
           </TabButton>
-          <TabButton active={activeTab === "gallery"} onClick={() => onTabChange("gallery")}>
+          <TabButton
+            active={activeTab === "gallery"}
+            onClick={() => onTabChange("gallery")}
+          >
             Galeria publiczna
           </TabButton>
         </div>
@@ -205,7 +212,10 @@ function SidebarContent({
           onDeleteCustomTile={onDeleteCustomTile}
         />
       ) : (
-        <GalleryTab galleryTiles={galleryTiles} onAddFromGallery={onAddFromGallery} />
+        <GalleryTab
+          galleryTiles={galleryTiles}
+          onAddFromGallery={onAddFromGallery}
+        />
       )}
     </div>
   );
@@ -270,7 +280,12 @@ function MineTab({
         }}
       >
         {DEFAULT_NVC_TILES.map((tile: TileTemplate) => (
-          <TileCard key={tile.id} tile={tile} onDragStart={onDragStart} onTap={onTap} />
+          <TileCard
+            key={tile.id}
+            tile={tile}
+            onDragStart={onDragStart}
+            onTap={onTap}
+          />
         ))}
       </div>
 
@@ -367,7 +382,11 @@ function GalleryTab({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
         {galleryTiles.map((tile) => (
-          <GalleryTileCard key={tile.id} tile={tile} onAdd={() => onAddFromGallery(tile.id)} />
+          <GalleryTileCard
+            key={tile.id}
+            tile={tile}
+            onAdd={() => onAddFromGallery(tile.id)}
+          />
         ))}
       </div>
 
@@ -390,7 +409,13 @@ function GalleryTab({
   );
 }
 
-function GalleryTileCard({ tile, onAdd }: { tile: TileOut; onAdd: () => void }) {
+function GalleryTileCard({
+  tile,
+  onAdd,
+}: {
+  tile: TileOut;
+  onAdd: () => void;
+}) {
   const [hovered, setHovered] = useState(false);
   const hasIcon = !!tile.icon;
 
@@ -402,7 +427,9 @@ function GalleryTileCard({ tile, onAdd }: { tile: TileOut; onAdd: () => void }) 
         background: tile.color,
         borderRadius: 16,
         border: "1px solid rgba(0,0,0,0.05)",
-        boxShadow: hovered ? "0 8px 24px rgba(0,0,0,0.07)" : "0 2px 8px rgba(0,0,0,0.03)",
+        boxShadow: hovered
+          ? "0 8px 24px rgba(0,0,0,0.07)"
+          : "0 2px 8px rgba(0,0,0,0.03)",
         padding: "10px 12px",
         display: "flex",
         alignItems: "center",
@@ -411,7 +438,9 @@ function GalleryTileCard({ tile, onAdd }: { tile: TileOut; onAdd: () => void }) 
       }}
     >
       {hasIcon && (
-        <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1 }}>{tile.icon}</span>
+        <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1 }}>
+          {tile.icon}
+        </span>
       )}
 
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -482,20 +511,7 @@ export function TileSidebar({
 }: TileSidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"mine" | "gallery">("mine");
-
-  // Detect viewport width — replaces Tailwind md: classes.
-  // Initial value is read in the useState lazy initializer (runs only on client)
-  // so the effect body only registers the change listener — no synchronous setState.
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(max-width: 767px)").matches;
-  });
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
+  const isMobile = useMobile();
 
   const onDragStart = (e: DragEvent<HTMLDivElement>, tile: TileTemplate) => {
     e.dataTransfer.setData("application/nvc-tile", JSON.stringify(tile));
